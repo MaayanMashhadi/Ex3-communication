@@ -16,28 +16,41 @@ struct SocketState
 	int len;
 };
 
-const int TIME_PORT = 27015;
+const int PORT = 27015;
 const int MAX_SOCKETS = 60;
 const int EMPTY = 0;
 const int LISTEN = 1;
 const int RECEIVE = 2;
 const int IDLE = 3;
 const int SEND = 4;
-const int SEND_TIME = 1;
-const int SEND_SECONDS = 2;
+const int HEAD = 5;
+const int PUT = 6;
+const int POST = 7;
+const int DELETE_ = 8;
+const int OPTIONS = 9;
+const int TRACE = 10;
+const int GET = 11;
 
-bool addSocket(SOCKET id, int what);
-void removeSocket(int index);
-void acceptConnection(int index);
-void receiveMessage(int index);
-void sendMessage(int index);
-
-struct SocketState sockets[MAX_SOCKETS] = { 0 };
-int socketsCount = 0;
+bool addSocket(SOCKET id, int what, SocketState* sockets, int& socketsCount);
+void removeSocket(int index, SocketState* sockets, int& socketsCount);
+void acceptConnection(int index, SocketState* sockets,int& socketsCount);
+void receiveMessage(int index, SocketState* sockets, int& SocketCount);
+void sendMessage(int index, SocketState* sockets);
+int getSubType(string str);
+void traceReq(int index, SocketState* sockets);
+void deleteReq(int index, SocketState* sockets);
+void optionReq(int index, SocketState* sockets);
+void putReq(int index, SocketState* sockets);
+void postReq(int index, SocketState* sockets);
+void headReq(int index, SocketState* sockets);
+void getReq(int index, SocketState* sockets);
 
 
 void main()
 {
+	struct SocketState sockets[MAX_SOCKETS] = { 0 };
+	int socketsCount = 0;
+
 	// Initialize Winsock (Windows Sockets).
 
 	// Create a WSADATA object called wsaData.
@@ -51,7 +64,7 @@ void main()
 	// The WSACleanup function destructs the use of WS2_32.DLL by a process.
 	if (NO_ERROR != WSAStartup(MAKEWORD(2, 2), &wsaData))
 	{
-		cout << "Time Server: Error at WSAStartup()\n";
+		cout << "Server: Error at WSAStartup()\n";
 		return;
 	}
 
@@ -75,7 +88,7 @@ void main()
 	// error number associated with the last error that occurred.
 	if (INVALID_SOCKET == listenSocket)
 	{
-		cout << "Time Server: Error at socket(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at socket(): " << WSAGetLastError() << endl;
 		WSACleanup();
 		return;
 	}
@@ -98,7 +111,7 @@ void main()
 	// IP Port. The htons (host to network - short) function converts an
 	// unsigned short from host to TCP/IP network byte order 
 	// (which is big-endian).
-	serverService.sin_port = htons(TIME_PORT);
+	serverService.sin_port = htons(PORT);
 
 	// Bind the socket for client's requests.
 
@@ -108,7 +121,7 @@ void main()
 	// sockaddr structure (in bytes).
 	if (SOCKET_ERROR == bind(listenSocket, (SOCKADDR*)&serverService, sizeof(serverService)))
 	{
-		cout << "Time Server: Error at bind(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at bind(): " << WSAGetLastError() << endl;
 		closesocket(listenSocket);
 		WSACleanup();
 		return;
@@ -119,13 +132,13 @@ void main()
 	// from other clients). This sets the backlog parameter.
 	if (SOCKET_ERROR == listen(listenSocket, 5))
 	{
-		cout << "Time Server: Error at listen(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at listen(): " << WSAGetLastError() << endl;
 		closesocket(listenSocket);
 		WSACleanup();
 		return;
 	}
-	addSocket(listenSocket, LISTEN);
-
+	addSocket(listenSocket, LISTEN, sockets, socketsCount);
+	
 	// Accept connections and handles them one by one.
 	while (true)
 	{
@@ -160,7 +173,7 @@ void main()
 		nfd = select(0, &waitRecv, &waitSend, NULL, NULL);
 		if (nfd == SOCKET_ERROR)
 		{
-			cout << "Time Server: Error at select(): " << WSAGetLastError() << endl;
+			cout << "Server: Error at select(): " << WSAGetLastError() << endl;
 			WSACleanup();
 			return;
 		}
@@ -173,11 +186,11 @@ void main()
 				switch (sockets[i].recv)
 				{
 				case LISTEN:
-					acceptConnection(i);
+					acceptConnection(i,sockets,socketsCount);
 					break;
 
 				case RECEIVE:
-					receiveMessage(i);
+					receiveMessage(i,sockets, socketsCount);
 					break;
 				}
 			}
@@ -191,7 +204,7 @@ void main()
 				switch (sockets[i].send)
 				{
 				case SEND:
-					sendMessage(i);
+					sendMessage(i,sockets);
 					break;
 				}
 			}
@@ -199,12 +212,12 @@ void main()
 	}
 
 	// Closing connections and Winsock.
-	cout << "Time Server: Closing Connection.\n";
+	cout << "Server: Closing Connection.\n";
 	closesocket(listenSocket);
 	WSACleanup();
 }
 
-bool addSocket(SOCKET id, int what)
+bool addSocket(SOCKET id, int what,SocketState* sockets, int& socketsCount)
 {
 	for (int i = 0; i < MAX_SOCKETS; i++)
 	{
@@ -221,14 +234,14 @@ bool addSocket(SOCKET id, int what)
 	return (false);
 }
 
-void removeSocket(int index)
+void removeSocket(int index, SocketState* sockets, int& socketsCount)
 {
 	sockets[index].recv = EMPTY;
 	sockets[index].send = EMPTY;
 	socketsCount--;
 }
 
-void acceptConnection(int index)
+void acceptConnection(int index, SocketState* sockets,int& socketsCount)
 {
 	SOCKET id = sockets[index].id;
 	struct sockaddr_in from;		// Address of sending partner
@@ -237,10 +250,10 @@ void acceptConnection(int index)
 	SOCKET msgSocket = accept(id, (struct sockaddr*)&from, &fromLen);
 	if (INVALID_SOCKET == msgSocket)
 	{
-		cout << "Time Server: Error at accept(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at accept(): " << WSAGetLastError() << endl;
 		return;
 	}
-	cout << "Time Server: Client " << inet_ntoa(from.sin_addr) << ":" << ntohs(from.sin_port) << " is connected." << endl;
+	cout << "Server: Client " << inet_ntoa(from.sin_addr) << ":" << ntohs(from.sin_port) << " is connected." << endl;
 
 	//
 	// Set the socket to be in non-blocking mode.
@@ -248,10 +261,10 @@ void acceptConnection(int index)
 	unsigned long flag = 1;
 	if (ioctlsocket(msgSocket, FIONBIO, &flag) != 0)
 	{
-		cout << "Time Server: Error at ioctlsocket(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at ioctlsocket(): " << WSAGetLastError() << endl;
 	}
 
-	if (addSocket(msgSocket, RECEIVE) == false)
+	if (addSocket(msgSocket, RECEIVE,sockets, socketsCount) == false)
 	{
 		cout << "\t\tToo many connections, dropped!\n";
 		closesocket(id);
@@ -259,99 +272,183 @@ void acceptConnection(int index)
 	return;
 }
 
-void receiveMessage(int index)
+void receiveMessage(int index, SocketState* sockets,int& SocketCount)
 {
 	SOCKET msgSocket = sockets[index].id;
 
 	int len = sockets[index].len;
 	int bytesRecv = recv(msgSocket, &sockets[index].buffer[len], sizeof(sockets[index].buffer) - len, 0);
 
-	if (SOCKET_ERROR == bytesRecv)
+	if (SOCKET_ERROR == bytesRecv || bytesRecv == 0)
 	{
-		cout << "Time Server: Error at recv(): " << WSAGetLastError() << endl;
+		if (bytesRecv == 0)
+		{
+			cout << "Server: Error at recv(): " << WSAGetLastError() << endl;
+		}
 		closesocket(msgSocket);
-		removeSocket(index);
-		return;
-	}
-	if (bytesRecv == 0)
-	{
-		closesocket(msgSocket);
-		removeSocket(index);
+		removeSocket(index,sockets, SocketCount);
 		return;
 	}
 	else
 	{
 		sockets[index].buffer[len + bytesRecv] = '\0'; //add the null-terminating to make it a string
-		cout << "Time Server: Recieved: " << bytesRecv << " bytes of \"" << &sockets[index].buffer[len] << "\" message.\n";
+		cout << "Server: Recieved: " << bytesRecv << " bytes of \"" << &sockets[index].buffer[len] << "\" message.\n";
 
 		sockets[index].len += bytesRecv;
 
 		if (sockets[index].len > 0)
 		{
-			if (strncmp(sockets[index].buffer, "TimeString", 10) == 0)
-			{
-				sockets[index].send = SEND;
-				sockets[index].sendSubType = SEND_TIME;
-				memcpy(sockets[index].buffer, &sockets[index].buffer[10], sockets[index].len - 10);
-				sockets[index].len -= 10;
-				return;
-			}
-			else if (strncmp(sockets[index].buffer, "SecondsSince1970", 16) == 0)
-			{
-				sockets[index].send = SEND;
-				sockets[index].sendSubType = SEND_SECONDS;
-				memcpy(sockets[index].buffer, &sockets[index].buffer[16], sockets[index].len - 16);
-				sockets[index].len -= 16;
-				return;
-			}
-			else if (strncmp(sockets[index].buffer, "Exit", 4) == 0)
-			{
-				closesocket(msgSocket);
-				removeSocket(index);
-				return;
-			}
+			string buffer = (string)sockets[index].buffer;
+			string req = buffer.substr(0, buffer.find(" "));
+			int len = req.length() + 2;
+
+			sockets[index].len -= len;
+			sockets[index].send = SEND;
+			sockets[index].sendSubType = getSubType(req);
+			memcpy(sockets[index].buffer, &sockets[index].buffer[len], sockets[index].len);
+			sockets[index].buffer[sockets[index].len] = '\0';
 		}
 	}
 
 }
 
-void sendMessage(int index)
+int getSubType(string str)
+{
+	int res;
+
+	if (strcmp(str.c_str(), "GET") == 0)
+	{
+		return GET;
+	}
+	else if (strcmp(str.c_str(), "OPTIONS") == 0)
+	{
+		return OPTIONS;
+	}
+	else if (strcmp(str.c_str(), "HEAD") == 0)
+	{
+		return HEAD;
+	}
+	else if (strcmp(str.c_str(), "POST") == 0)
+	{
+		return POST;
+	}
+	else if (strcmp(str.c_str(), "PUT") == 0)
+	{
+		return PUT;
+	}
+	else if (strcmp(str.c_str(), "DELETE") == 0)
+	{
+		return DELETE_;
+	}
+	else if (strcmp(str.c_str(), "TRACE") == 0)
+	{
+		return TRACE;
+	}
+}
+
+void sendMessage(int index, SocketState* sockets)
 {
 	int bytesSent = 0;
 	char sendBuff[255];
 
 	SOCKET msgSocket = sockets[index].id;
-	if (sockets[index].sendSubType == SEND_TIME)
-	{
-		// Answer client's request by the current time string.
 
-		// Get the current time.
-		time_t timer;
-		time(&timer);
-		// Parse the current time to printable string.
-		strcpy(sendBuff, ctime(&timer));
-		sendBuff[strlen(sendBuff) - 1] = 0; //to remove the new-line from the created string
+	switch (sockets[index].sendSubType)
+	{	
+	case GET:
+		getReq(index, sockets);
+		break;
+	case OPTIONS:
+		optionReq(index,sockets);
+		break;
+	case HEAD:
+		headReq(index, sockets);
+		break;
+	case POST:
+		postReq(index, sockets);
+		break;
+	case PUT:
+		putReq(index, sockets);
+		break;
+	case DELETE_:
+		deleteReq(index, sockets);
+		break;
+	case TRACE:
+		traceReq(index, sockets);
+	default:
+		break;
 	}
-	else if (sockets[index].sendSubType == SEND_SECONDS)
-	{
-		// Answer client's request by the current time in seconds.
 
-		// Get the current time.
-		time_t timer;
-		time(&timer);
-		// Convert the number to string.
-		itoa((int)timer, sendBuff, 10);
-	}
+	//if (sockets[index].sendSubType == POST)
+	//{
+	//	// Answer client's request by the current time string.
+
+	//	// Get the current time.
+	//	time_t timer;
+	//	time(&timer);
+	//	// Parse the current time to printable string.
+	//	strcpy(sendBuff, ctime(&timer));
+	//	sendBuff[strlen(sendBuff) - 1] = 0; //to remove the new-line from the created string
+	//}
+	//else if (sockets[index].sendSubType == GET)
+	//{
+	//	// Answer client's request by the current time in seconds.
+
+	//	// Get the current time.
+	//	time_t timer;
+	//	time(&timer);
+	//	// Convert the number to string.
+	//	itoa((int)timer, sendBuff, 10);
+	//}
+
 
 	bytesSent = send(msgSocket, sendBuff, (int)strlen(sendBuff), 0);
+	memset(sockets[index].buffer, 0, 255);
+	sockets[index].len = 0;
+
 	if (SOCKET_ERROR == bytesSent)
 	{
-		cout << "Time Server: Error at send(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at send(): " << WSAGetLastError() << endl;
 		return;
 	}
 
-	cout << "Time Server: Sent: " << bytesSent << "\\" << strlen(sendBuff) << " bytes of \"" << sendBuff << "\" message.\n";
+	cout << "Server: Sent: " << bytesSent << "\\" << strlen(sendBuff) << " bytes of \"" << sendBuff << "\" message.\n";
 
 	sockets[index].send = IDLE;
+}
+
+void traceReq(int index, SocketState* sockets)
+{
+
+}
+
+void deleteReq(int index, SocketState* sockets)
+{
+
+}
+
+void optionReq(int index, SocketState* sockets)
+{
+
+}
+
+void putReq(int index, SocketState* sockets)
+{
+
+}
+
+void postReq(int index, SocketState* sockets)
+{
+
+}
+
+void headReq(int index, SocketState* sockets)
+{
+
+}
+
+void getReq(int index, SocketState* sockets)
+{
+
 }
 
