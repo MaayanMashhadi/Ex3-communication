@@ -5,6 +5,7 @@ using namespace std;
 #include <winsock2.h>
 #include <string.h>
 #include <time.h>
+#include <string>
 
 struct SocketState
 {
@@ -37,13 +38,13 @@ void acceptConnection(int index, SocketState* sockets,int& socketsCount);
 void receiveMessage(int index, SocketState* sockets, int& SocketCount);
 void sendMessage(int index, SocketState* sockets);
 int getSubType(string str);
-void traceReq(int index, SocketState* sockets);
-void deleteReq(int index, SocketState* sockets);
-void optionReq(int index, SocketState* sockets);
-void putReq(int index, SocketState* sockets);
-void postReq(int index, SocketState* sockets);
-void headReq(int index, SocketState* sockets);
-void getReq(int index, SocketState* sockets);
+string traceReq(int index, SocketState* sockets);
+string deleteReq(int index, SocketState* sockets);
+string optionReq();
+string putReq(int index, SocketState* sockets);
+string postReq(int index, SocketState* sockets);
+string headReq(int index, SocketState* sockets);
+string getReq(int index, SocketState* sockets);
 
 
 void main()
@@ -350,58 +351,38 @@ void sendMessage(int index, SocketState* sockets)
 {
 	int bytesSent = 0;
 	char sendBuff[255];
+	string response;
 
 	SOCKET msgSocket = sockets[index].id;
 
 	switch (sockets[index].sendSubType)
 	{	
 	case GET:
-		getReq(index, sockets);
+		response = getReq(index, sockets);
 		break;
 	case OPTIONS:
-		optionReq(index,sockets);
+		response = optionReq();
 		break;
 	case HEAD:
-		headReq(index, sockets);
+		response = headReq(index, sockets);
 		break;
 	case POST:
-		postReq(index, sockets);
+		response = postReq(index, sockets);
 		break;
 	case PUT:
-		putReq(index, sockets);
+		response = putReq(index, sockets);
 		break;
 	case DELETE_:
-		deleteReq(index, sockets);
+		response = deleteReq(index, sockets);
 		break;
 	case TRACE:
-		traceReq(index, sockets);
+		response = traceReq(index, sockets);
+		
 	default:
 		break;
 	}
 
-	//if (sockets[index].sendSubType == POST)
-	//{
-	//	// Answer client's request by the current time string.
-
-	//	// Get the current time.
-	//	time_t timer;
-	//	time(&timer);
-	//	// Parse the current time to printable string.
-	//	strcpy(sendBuff, ctime(&timer));
-	//	sendBuff[strlen(sendBuff) - 1] = 0; //to remove the new-line from the created string
-	//}
-	//else if (sockets[index].sendSubType == GET)
-	//{
-	//	// Answer client's request by the current time in seconds.
-
-	//	// Get the current time.
-	//	time_t timer;
-	//	time(&timer);
-	//	// Convert the number to string.
-	//	itoa((int)timer, sendBuff, 10);
-	//}
-
-
+	strcpy(sendBuff, response.c_str());
 	bytesSent = send(msgSocket, sendBuff, (int)strlen(sendBuff), 0);
 	memset(sockets[index].buffer, 0, 255);
 	sockets[index].len = 0;
@@ -417,37 +398,49 @@ void sendMessage(int index, SocketState* sockets)
 	sockets[index].send = IDLE;
 }
 
-void traceReq(int index, SocketState* sockets)
+string traceReq(int index, SocketState* sockets)
+{
+	string response;
+	string rn = "\r\n";
+	response = "HTTP/1.1 200 OK" + rn + "Content - type: message/http" + rn + "Content-length: ";
+
+	int len = strlen(sockets[index].buffer);
+	len += strlen("TRACE ");
+	response += to_string(len) + rn + rn + sockets[index].buffer;
+
+	return response;
+}
+
+string deleteReq(int index, SocketState* sockets)
 {
 
 }
 
-void deleteReq(int index, SocketState* sockets)
+string optionReq()
+{
+	string response;
+	string rn = "\r\n";
+
+	response = "HTTP/1.1 204 No Content" + rn + "Methods - OPTIONS, GET, HEAD, POST, PUT, DELETE, TRACE" + rn
+		+ "Content-length: 0" + rn + rn;
+}
+
+string putReq(int index, SocketState* sockets)
 {
 
 }
 
-void optionReq(int index, SocketState* sockets)
+string postReq(int index, SocketState* sockets)
 {
 
 }
 
-void putReq(int index, SocketState* sockets)
+string headReq(int index, SocketState* sockets)
 {
 
 }
 
-void postReq(int index, SocketState* sockets)
-{
-
-}
-
-void headReq(int index, SocketState* sockets)
-{
-
-}
-
-void getReq(int index, SocketState* sockets)
+string getReq(int index, SocketState* sockets)
 {
 
 }
