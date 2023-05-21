@@ -6,6 +6,7 @@ using namespace std;
 #include <string.h>
 #include <time.h>
 #include <string>
+#include <vector>
 
 struct SocketState
 {
@@ -38,13 +39,15 @@ void acceptConnection(int index, SocketState* sockets,int& socketsCount);
 void receiveMessage(int index, SocketState* sockets, int& SocketCount);
 void sendMessage(int index, SocketState* sockets);
 int getSubType(string str);
+string whichLanguage(string queryString);
+string title(string queryString);
 string traceReq(int index, SocketState* sockets);
 string deleteReq(int index, SocketState* sockets);
 string optionReq();
 string putReq(int index, SocketState* sockets);
 string postReq(int index, SocketState* sockets);
 string headReq(int index, SocketState* sockets);
-string getReq(int index, SocketState* sockets);
+string getReq(int index, string queryString, SocketState* sockets);
 
 
 void main()
@@ -423,10 +426,51 @@ string optionReq()
 
 	response = "HTTP/1.1 204 No Content" + rn + "Methods - OPTIONS, GET, HEAD, POST, PUT, DELETE, TRACE" + rn
 		+ "Content-length: 0" + rn + rn;
+
+	return response;
 }
 
-string putReq(int index, SocketState* sockets)
+string putReq(int index, string queryString, SocketState* sockets)
 {
+	string response;
+	string rn = "\r\n";
+	string lang = whichLanguage(queryString);
+	string tit = title(queryString);
+	string resource_path = "C:\\temp\\files/" + lang + "/";
+	FILE* f = fopen(resource_path.c_str(), "a");
+	string response = "";
+
+	if (f != nullptr)
+	{
+		response = "HTTP/1.1 200 OK" + rn + "Resource updated successfully" + rn + rn;
+	
+		vector<string> lines;
+		char buffer[5000];
+		while (fgets(buffer, sizeof(buffer), f) != nullptr) {
+			lines.emplace_back(buffer);
+		}
+		fclose(f);
+		f = fopen(resource_path.c_str(), "w");
+		
+		fprintf(f, "%s\n", tit.c_str());
+
+		for (const string& line : lines) {
+			fprintf(f, "%s", line.c_str());
+		}
+
+		fclose(f);
+	}
+
+	else
+	{
+		response = string("HTTP/1.1 404 page not found" + rn + rn);
+
+	}
+
+	return response;
+
+
+	
 
 }
 
@@ -440,8 +484,78 @@ string headReq(int index, SocketState* sockets)
 
 }
 
-string getReq(int index, SocketState* sockets)
+string getReq(int index, string queryString, SocketState* sockets)
 {
+	string rn = "\r\n";
+	string lang = whichLanguage(queryString);
+	string resource_path = "C:\\temp\\files/" + lang + "/";
+	FILE* f = fopen(resource_path.c_str(), "r");
+	string response = "";
+	char c;
+
+	if (f != nullptr)
+	{
+		response = response + "HTTP/1.1 200 OK" + rn + " ";
+		do {
+			c = fgetc(f);
+			if (c != EOF)
+			{
+				response.push_back(c);
+			}
+		} while (c != EOF);
+
+		fclose(f);
+	}
+	else
+	{
+		response = string("HTTP/1.1 404 page not found"+ rn + rn);
+	}
+
+	return response;
 
 }
+
+string whichLanguage(string queryString)
+{
+	bool found = false;
+	int index_lang = 0;
+	for (int i = 0; i < queryString.size() && !found; i++)
+	{
+
+		if (queryString[i] == '=') {
+			found = true;
+			index_lang = i + 1;
+		}
+
+	}
+
+	if (found)
+	{
+		return queryString.substr(index_lang, 2);
+	}
+}
+
+string title(string queryString)
+{
+	bool found = false;
+	int index_title = 0;
+	for (int i = 0; i < queryString.size(); i++)
+	{
+		if (found && queryString[i] == '=')
+		{
+			index_title = i + 1;
+		}
+
+		if (queryString[i] == '&') {
+			found = true;
+		}
+
+	}
+
+	if (found)
+	{
+		return queryString.substr(index_title, queryString.size()-1);
+	}
+}
+
 
