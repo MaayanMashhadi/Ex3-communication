@@ -7,6 +7,7 @@ using namespace std;
 #include <time.h>
 #include <string>
 #include <vector>
+#include <cstdio>
 
 struct SocketState
 {
@@ -38,6 +39,7 @@ void removeSocket(int index, SocketState* sockets, int& socketsCount);
 void acceptConnection(int index, SocketState* sockets,int& socketsCount);
 void receiveMessage(int index, SocketState* sockets, int& SocketCount);
 void sendMessage(int index, SocketState* sockets);
+string findFile(string queryString);
 int getSubType(string str);
 string whichLanguage(string queryString);
 string title(string queryString);
@@ -414,8 +416,23 @@ string traceReq(int index, SocketState* sockets)
 	return response;
 }
 
-string deleteReq(int index, SocketState* sockets)
+string deleteReq(int index, string queryString, SocketState* sockets)
 {
+	string response;
+	string rn = "\r\n";
+	string file_delete = findFile(queryString);
+	string resource_path = "C:\\temp\\files/" + file_delete + "/";
+	
+	if (remove(resource_path.c_str()) == 0) {
+		response = "HTTP/1.1 200 OK" + rn + "Resource deleted successfully" + rn + rn;
+	}
+
+	else
+	{
+		response = "HTTP/1.1 204 Failed to delete the file" + rn + rn;
+	}
+
+	return response;
 
 }
 
@@ -443,19 +460,24 @@ string putReq(int index, string queryString, SocketState* sockets)
 	if (f != nullptr)
 	{
 		response = "HTTP/1.1 200 OK" + rn + "Resource updated successfully" + rn + rn;
-	
-		vector<string> lines;
-		char buffer[5000];
-		while (fgets(buffer, sizeof(buffer), f) != nullptr) {
-			lines.emplace_back(buffer);
-		}
+
+		vector<char> lines;
+		char c;
+		do {
+			c = fgetc(f);
+			if (c != EOF)
+			{
+				lines.push_back(c);
+			}
+		} while (c != EOF);
+
 		fclose(f);
 		f = fopen(resource_path.c_str(), "w");
 		
 		fprintf(f, "%s\n", tit.c_str());
 
-		for (const string& line : lines) {
-			fprintf(f, "%s", line.c_str());
+		for (const char& line : lines) {
+			fprintf(f, "%s", line);
 		}
 
 		fclose(f);
@@ -479,9 +501,32 @@ string postReq(int index, SocketState* sockets)
 
 }
 
-string headReq(int index, SocketState* sockets)
+string headReq(int index, string queryString, SocketState* sockets)
 {
+	string response;
+	string rn = "\r\n";
+	string file = findFile(queryString);
+	string resource_path = "C:\\temp\\files/" + file + "/";
+	int fileSize = 0;
+	time_t currentTime;
+	time(&currentTime);
+	FILE* f = fopen(resource_path.c_str(), "r");
 
+	if (f != nullptr) {
+		response = "HTTP/1.1 200 OK" + rn + "Resource header: \r\nContent-type: text" + rn;
+		response += "Date: " + string(ctime(&currentTime)) + rn;
+		fseek(f, 0, SEEK_END);
+		fileSize = ftell(f);
+		rewind(f);
+		response += "Content-length: " + to_string(fileSize) + rn + rn;
+	}
+
+	else
+	{
+		response = "HTTP/1.1 404 page not found" + rn + rn;
+	}
+
+	return response;
 }
 
 string getReq(int index, string queryString, SocketState* sockets)
@@ -512,6 +557,25 @@ string getReq(int index, string queryString, SocketState* sockets)
 	}
 
 	return response;
+
+}
+
+string findFile(string queryString)
+{
+	int numOfBorder = 0;
+	int index_file = 0;
+
+	for (int i = 0; i < queryString.size(); i++) {
+		if (queryString[i] == '/') {
+			numOfBorder++;
+		}
+
+		if (numOfBorder == 3) {
+			index_file = i + 1;
+			break;
+		}
+	}
+	return queryString.substr(index_file, queryString.size() - 1);
 
 }
 
