@@ -1,0 +1,15 @@
+להתייעץ עם ג'ס:
+1. How do the server recieve the client request?
+for GET and PUT function
+
+2. The tree of the direcotries (I don't know where to put
+the input files, and which input files?) 
+
+3. Our api - is that ok what I did?
+
+4. The name of the path of the input files - maybe need to change according
+to api.
+
+5. How the response looks like?
+
+6. NEED: checking if all the function work
