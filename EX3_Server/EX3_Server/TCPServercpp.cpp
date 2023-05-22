@@ -11,6 +11,7 @@ using namespace std;
 
 struct SocketState
 {
+	time_t timer = 0;
 	SOCKET id;			// Socket handle
 	int	recv;			// Receiving?
 	int	send;			// Sending?
@@ -50,7 +51,7 @@ string putReq(int index, SocketState* sockets);
 string postReq(int index, SocketState* sockets);
 string headReq(int index, SocketState* sockets);
 string getReq(int index, string queryString, SocketState* sockets);
-
+size_t getBodyIndex(string buffer);
 
 void main()
 {
@@ -156,9 +157,14 @@ void main()
 		// macro to check which descriptor in each set is ready to be used).
 		fd_set waitRecv;
 		FD_ZERO(&waitRecv);
+		
 		for (int i = 0; i < MAX_SOCKETS; i++)
 		{
-			if ((sockets[i].recv == LISTEN) || (sockets[i].recv == RECEIVE))
+			if (checkIfTimeout(i, sockets))
+			{
+				removeSocket(i, sockets,socketsCount);
+			}
+			else if ((sockets[i].recv == LISTEN) || (sockets[i].recv == RECEIVE))
 				FD_SET(sockets[i].id, &waitRecv);
 		}
 
@@ -223,12 +229,27 @@ void main()
 	WSACleanup();
 }
 
+bool checkIfTimeout(int index, SocketState* sockets)
+{
+	time_t time_ = time(NULL);
+	if (sockets[index].timer != 0 && time_ - sockets[index].timer > 120)
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+	
+}
+
 bool addSocket(SOCKET id, int what,SocketState* sockets, int& socketsCount)
 {
 	for (int i = 0; i < MAX_SOCKETS; i++)
 	{
 		if (sockets[i].recv == EMPTY)
 		{
+			sockets[i].timer = time(NULL);
 			sockets[i].id = id;
 			sockets[i].recv = what;
 			sockets[i].send = IDLE;
@@ -242,6 +263,7 @@ bool addSocket(SOCKET id, int what,SocketState* sockets, int& socketsCount)
 
 void removeSocket(int index, SocketState* sockets, int& socketsCount)
 {
+	sockets[index].timer = 0;
 	sockets[index].recv = EMPTY;
 	sockets[index].send = EMPTY;
 	socketsCount--;
@@ -249,6 +271,7 @@ void removeSocket(int index, SocketState* sockets, int& socketsCount)
 
 void acceptConnection(int index, SocketState* sockets,int& socketsCount)
 {
+	sockets[index].timer = time(NULL);
 	SOCKET id = sockets[index].id;
 	struct sockaddr_in from;		// Address of sending partner
 	int fromLen = sizeof(from);
@@ -281,7 +304,6 @@ void acceptConnection(int index, SocketState* sockets,int& socketsCount)
 void receiveMessage(int index, SocketState* sockets,int& SocketCount)
 {
 	SOCKET msgSocket = sockets[index].id;
-
 	int len = sockets[index].len;
 	int bytesRecv = recv(msgSocket, &sockets[index].buffer[len], sizeof(sockets[index].buffer) - len, 0);
 
@@ -313,6 +335,7 @@ void receiveMessage(int index, SocketState* sockets,int& SocketCount)
 			sockets[index].sendSubType = getSubType(req);
 			memcpy(sockets[index].buffer, &sockets[index].buffer[len], sockets[index].len);
 			sockets[index].buffer[sockets[index].len] = '\0';
+			sockets[index].timer = time(NULL);
 		}
 	}
 
@@ -363,7 +386,7 @@ void sendMessage(int index, SocketState* sockets)
 	switch (sockets[index].sendSubType)
 	{	
 	case GET:
-		response = getReq(index, sockets);
+		//response = getReq(index, sockets);
 		break;
 	case OPTIONS:
 		response = optionReq();
@@ -486,7 +509,6 @@ string putReq(int index, string queryString, SocketState* sockets)
 	else
 	{
 		response = string("HTTP/1.1 404 page not found" + rn + rn);
-
 	}
 
 	return response;
@@ -498,7 +520,20 @@ string putReq(int index, string queryString, SocketState* sockets)
 
 string postReq(int index, SocketState* sockets)
 {
+	string response;
+	string rn = "\r\n";
+	size_t bodyInd = getBodyIndex((string)sockets[index].buffer);
+	cout << "Post - " << &sockets[index].buffer[bodyInd] << endl;
+	response = "HTTP/1.1 200 OK" + rn + "Content-length: 0" + rn + rn ;
+	
+	return response;
+}
 
+size_t getBodyIndex(string buffer)
+{
+	size_t index = 4;
+	index += buffer.find("\r\n\r\n");
+	return index;
 }
 
 string headReq(int index, string queryString, SocketState* sockets)
