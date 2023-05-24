@@ -1,4 +1,5 @@
 #define _CRT_SECURE_NO_WARNINGS
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include <iostream>
 using namespace std;
 #pragma comment(lib, "Ws2_32.lib")
@@ -52,6 +53,7 @@ string postReq(int index, SocketState* sockets);
 string headReq(int index, SocketState* sockets);
 string getReq(int index, SocketState* sockets);
 size_t getBodyIndex(string buffer);
+bool checkIfTimeout(int index, SocketState* sockets);
 
 void main()
 {
@@ -473,7 +475,6 @@ string optionReq()
 
 string putReq(int index, SocketState* sockets)
 {
-	string response;
 	string rn = "\r\n";
 	string FileName = findFile(string(sockets[index].buffer));
 	string lang = whichLanguage(string(sockets[index].buffer));
