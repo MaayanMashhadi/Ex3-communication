@@ -50,7 +50,7 @@ string optionReq();
 string putReq(int index, SocketState* sockets);
 string postReq(int index, SocketState* sockets);
 string headReq(int index, SocketState* sockets);
-string getReq(int index, string queryString, SocketState* sockets);
+string getReq(int index, SocketState* sockets);
 size_t getBodyIndex(string buffer);
 
 void main()
@@ -386,7 +386,7 @@ void sendMessage(int index, SocketState* sockets)
 	switch (sockets[index].sendSubType)
 	{	
 	case GET:
-		//response = getReq(index, sockets);
+		response = getReq(index, sockets);
 		break;
 	case OPTIONS:
 		response = optionReq();
@@ -564,10 +564,10 @@ string headReq(int index, string queryString, SocketState* sockets)
 	return response;
 }
 
-string getReq(int index, string queryString, SocketState* sockets)
+string getReq(int index, SocketState* sockets)
 {
 	string rn = "\r\n";
-	string lang = whichLanguage(queryString);
+	string lang = whichLanguage(sockets[index].buffer);
 	string resource_path = "C:\\temp\\files/" + lang + "/";
 	FILE* f = fopen(resource_path.c_str(), "r");
 	string response = "";
