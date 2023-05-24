@@ -50,7 +50,7 @@ string optionReq();
 string putReq(int index, SocketState* sockets);
 string postReq(int index, SocketState* sockets);
 string headReq(int index, SocketState* sockets);
-string getReq(int index, string queryString, SocketState* sockets);
+string getReq(int index, SocketState* sockets);
 size_t getBodyIndex(string buffer);
 
 void main()
@@ -439,11 +439,11 @@ string traceReq(int index, SocketState* sockets)
 	return response;
 }
 
-string deleteReq(int index, string queryString, SocketState* sockets)
+string deleteReq(int index, SocketState* sockets)
 {
 	string response;
 	string rn = "\r\n";
-	string file_delete = findFile(queryString);
+	string file_delete = findFile(string(sockets[index].buffer));
 	string resource_path = "C:\\temp\\files/" + file_delete + "/";
 	
 	if (remove(resource_path.c_str()) == 0) {
@@ -470,12 +470,12 @@ string optionReq()
 	return response;
 }
 
-string putReq(int index, string queryString, SocketState* sockets)
+string putReq(int index, SocketState* sockets)
 {
 	string response;
 	string rn = "\r\n";
-	string lang = whichLanguage(queryString);
-	string tit = title(queryString);
+	string lang = whichLanguage(string(sockets[index].buffer));
+	string tit = title(string(sockets[index].buffer));
 	string resource_path = "C:\\temp\\files/" + lang + "/";
 	FILE* f = fopen(resource_path.c_str(), "a");
 	string response = "";
@@ -536,11 +536,11 @@ size_t getBodyIndex(string buffer)
 	return index;
 }
 
-string headReq(int index, string queryString, SocketState* sockets)
+string headReq(int index, SocketState* sockets)
 {
 	string response;
 	string rn = "\r\n";
-	string file = findFile(queryString);
+	string file = findFile(string(sockets[index].buffer));
 	string resource_path = "C:\\temp\\files/" + file + "/";
 	int fileSize = 0;
 	time_t currentTime;
@@ -564,10 +564,10 @@ string headReq(int index, string queryString, SocketState* sockets)
 	return response;
 }
 
-string getReq(int index, string queryString, SocketState* sockets)
+string getReq(int index, SocketState* sockets)
 {
 	string rn = "\r\n";
-	string lang = whichLanguage(queryString);
+	string lang = whichLanguage(string(sockets[index].buffer));
 	string resource_path = "C:\\temp\\files/" + lang + "/";
 	FILE* f = fopen(resource_path.c_str(), "r");
 	string response = "";
