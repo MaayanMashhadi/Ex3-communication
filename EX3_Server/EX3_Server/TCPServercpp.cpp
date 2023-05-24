@@ -386,7 +386,7 @@ void sendMessage(int index, SocketState* sockets)
 	switch (sockets[index].sendSubType)
 	{	
 	case GET:
-		//response = getReq(index, sockets);
+		response = getReq(index, sockets);
 		break;
 	case OPTIONS:
 		response = optionReq();
@@ -443,8 +443,9 @@ string deleteReq(int index, SocketState* sockets)
 {
 	string response;
 	string rn = "\r\n";
-	string file_delete = findFile(string(sockets[index].buffer));
-	string resource_path = "C:\\temp\\files/" + file_delete + "/";
+	string FileName = findFile(string(sockets[index].buffer));
+	string lang = whichLanguage(string(sockets[index].buffer));
+	string resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName; 
 	
 	if (remove(resource_path.c_str()) == 0) {
 		response = "HTTP/1.1 200 OK" + rn + "Resource deleted successfully" + rn + rn;
@@ -474,9 +475,10 @@ string putReq(int index, SocketState* sockets)
 {
 	string response;
 	string rn = "\r\n";
+	string FileName = findFile(string(sockets[index].buffer));
 	string lang = whichLanguage(string(sockets[index].buffer));
+	string resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName;
 	string tit = title(string(sockets[index].buffer));
-	string resource_path = "C:\\temp\\files/" + lang + "/";
 	FILE* f = fopen(resource_path.c_str(), "a");
 	string response = "";
 
@@ -540,8 +542,9 @@ string headReq(int index, SocketState* sockets)
 {
 	string response;
 	string rn = "\r\n";
-	string file = findFile(string(sockets[index].buffer));
-	string resource_path = "C:\\temp\\files/" + file + "/";
+	string FileName = findFile(string(sockets[index].buffer));
+	string lang = whichLanguage(string(sockets[index].buffer));
+	string resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName;
 	int fileSize = 0;
 	time_t currentTime;
 	time(&currentTime);
@@ -567,8 +570,9 @@ string headReq(int index, SocketState* sockets)
 string getReq(int index, SocketState* sockets)
 {
 	string rn = "\r\n";
+	string FileName = findFile(string(sockets[index].buffer));
 	string lang = whichLanguage(string(sockets[index].buffer));
-	string resource_path = "C:\\temp\\files/" + lang + "/";
+	string resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName;
 	FILE* f = fopen(resource_path.c_str(), "r");
 	string response = "";
 	char c;
@@ -599,6 +603,7 @@ string findFile(string queryString)
 {
 	int numOfBorder = 0;
 	int index_file = 0;
+	int question_mark = 0;
 
 	for (int i = 0; i < queryString.size(); i++) {
 		if (queryString[i] == '/') {
@@ -610,7 +615,15 @@ string findFile(string queryString)
 			break;
 		}
 	}
-	return queryString.substr(index_file, queryString.size() - 1);
+
+	for (int i = 0; i < queryString.size(); i++)
+	{
+		if (queryString[i] == '?') {
+			question_mark = i + 1;
+			break;
+		}
+	}
+	return queryString.substr(index_file, question_mark);
 
 }
 
