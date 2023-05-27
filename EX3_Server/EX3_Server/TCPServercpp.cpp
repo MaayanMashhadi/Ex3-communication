@@ -8,21 +8,17 @@
 #include <string.h>
 #include <string>
 #include <time.h>
-#include <map>
 #include <vector>
 #include <cstdio>
 
 using namespace std;
-using std::map;
-
-const int HTTP_PORT = 27015;
+const int PORT = 27015;
 const int MAX_SOCKETS = 60;
-constexpr int BUFFER_SIZE = 2048;
-//const int EMPTY = 0;
-//const int LISTEN = 1;
-//const int RECEIVE = 2;
-//const int IDLE = 3;
-//const int SEND = 4;
+const int EMPTY = 0;
+const int LISTEN = 1;
+const int RECEIVE = 2;
+const int IDLE = 3;
+const int SEND = 4;
 const int HEAD = 5;
 const int PUT = 6;
 const int POST = 7;
@@ -30,30 +26,26 @@ const int DELETE_ = 8;
 const int OPTIONS = 9;
 const int TRACE = 10;
 const int GET = 11;
-enum SocketStatus { EMPTY, LISTEN, RECEIVE, IDLE, SEND };
 
 
 struct SocketState
 {
+	time_t timer;
 	SOCKET id;
-	SocketStatus recv;
-	SocketStatus send;
-	int sendSubType;
-	time_t LastActiveted;
-	char buffer[BUFFER_SIZE];
-	int DataLen;
+	int recv;
+	int send;
+	int sendSubType; 
+	char buffer[3000];
+	int len;
 };
 
 string title(string queryString);
 int getSubType(string str);
-bool addSocket(SOCKET id, SocketStatus what, SocketState* sockets, int& socketsCount);
+bool addSocket(SOCKET id, int what, SocketState* sockets, int& socketsCount);
 void removeSocket(int index, SocketState* sockets, int& socketsCount);
 void acceptConnection(int index, SocketState* sockets, int& socketsCount);
-void receiveMessage(int index, SocketState* sockets, int& socketsCount);
+void receiveMessage(int index, SocketState* sockets, int& SocketCount);
 void sendMessage(int index, SocketState* sockets);
-void updateSocketsByResponseTime(SocketState* sockets, int& socketsCount);
-void updateSendSubType(int index, SocketState* sockets);
-string getLangFromMessage(int index, SocketState* sockets);
 size_t getBodyIndex(string buffer);
 string whichFile(string queryString);
 string traceReq(int index, SocketState* sockets);
@@ -65,13 +57,13 @@ string headReq(int index, SocketState* sockets);
 string getReq(int index, SocketState* sockets);
 string findFile(string queryString);
 string whichLanguage(string queryString);
+bool checkIfTimeout(int index, SocketState* sockets);
 
 void main()
 {
 	struct SocketState sockets[MAX_SOCKETS] = { 0 };
 	int socketsCount = 0;
 
-	//set timeout for 'select' function
 	struct timeval timeOut;
 	timeOut.tv_sec = 120;
 	timeOut.tv_usec = 0;
@@ -89,7 +81,7 @@ void main()
 	// The WSACleanup function destructs the use of WS2_32.DLL by a process.
 	if (NO_ERROR != WSAStartup(MAKEWORD(2, 2), &wsaData))
 	{
-		cout << "HTTP Server: Error at WSAStartup()\n";
+		cout << "Server: Error at WSAStartup()\n";
 		return;
 	}
 
@@ -113,7 +105,7 @@ void main()
 	// error number associated with the last error that occurred.
 	if (INVALID_SOCKET == listenSocket)
 	{
-		cout << "HTTP Server: Error at socket(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at socket(): " << WSAGetLastError() << endl;
 		WSACleanup();
 		return;
 	}
@@ -136,7 +128,7 @@ void main()
 	// IP Port. The htons (host to network - short) function converts an
 	// unsigned short from host to TCP/IP network byte order 
 	// (which is big-endian).
-	serverService.sin_port = htons(HTTP_PORT);
+	serverService.sin_port = htons(PORT);
 
 	// Bind the socket for client's requests.
 
@@ -146,7 +138,7 @@ void main()
 	// sockaddr structure (in bytes).
 	if (SOCKET_ERROR == bind(listenSocket, (SOCKADDR*)&serverService, sizeof(serverService)))
 	{
-		cout << "HTTP Server: Error at bind(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at bind(): " << WSAGetLastError() << endl;
 		closesocket(listenSocket);
 		WSACleanup();
 		return;
@@ -157,7 +149,7 @@ void main()
 	// from other clients). This sets the backlog parameter.
 	if (SOCKET_ERROR == listen(listenSocket, 5))//line need to be significantly small
 	{
-		cout << "HTTP Server: Error at listen(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at listen(): " << WSAGetLastError() << endl;
 		closesocket(listenSocket);
 		WSACleanup();
 		return;
@@ -174,12 +166,18 @@ void main()
 		// and still performing other operations (Use NULL for blocking). Finally,
 		// select returns the number of descriptors which are ready for use (use FD_ISSET
 		// macro to check which descriptor in each set is ready to be used).
-		updateSocketsByResponseTime(sockets, socketsCount);
+		
+		
 		fd_set waitRecv;
 		FD_ZERO(&waitRecv);
+
 		for (int i = 0; i < MAX_SOCKETS; i++)
 		{
-			if ((sockets[i].recv == LISTEN) || (sockets[i].recv == RECEIVE))
+			if (checkIfTimeout(i, sockets))
+			{
+				removeSocket(i, sockets, socketsCount);
+			}
+			else if ((sockets[i].recv == LISTEN) || (sockets[i].recv == RECEIVE))
 				FD_SET(sockets[i].id, &waitRecv);
 		}
 
@@ -191,16 +189,11 @@ void main()
 				FD_SET(sockets[i].id, &waitSend);
 		}
 
-		//
-		// Wait for interesting event.
-		// Note: First argument is ignored. The fourth is for exceptions.
-		// And as written above the last is a timeout, hence we are blocked if nothing happens.
-		//
 		int nfd;
 		nfd = select(0, &waitRecv, &waitSend, NULL, &timeOut);
 		if (nfd == SOCKET_ERROR)
 		{
-			cout << "HTTP Server: Error at select(): " << WSAGetLastError() << endl;
+			cout << "Server: Error at select(): " << WSAGetLastError() << endl;
 			WSACleanup();
 			return;
 		}
@@ -234,28 +227,35 @@ void main()
 	}
 
 	// Closing connections and Winsock.
-	cout << "HTTP Server: Closing Connection.\n";
+	cout << "Server: Closing Connection.\n";
 	closesocket(listenSocket);
 	WSACleanup();
 }
 
-bool addSocket(SOCKET id, SocketStatus what, SocketState* sockets, int& socketsCount)
+bool checkIfTimeout(int index, SocketState* sockets)
 {
-	// Set the socket to be in non-blocking mode.
-	unsigned long flag = 1;
-	if (ioctlsocket(id, FIONBIO, &flag) != 0)
+	time_t time_ = time(NULL);
+	if ((sockets[index].timer != 0 ) && (time_ - sockets[index].timer > 120))
 	{
-		cout << "HTTP Server: Error at ioctlsocket(): " << WSAGetLastError() << endl;
+		return true;
 	}
+	else
+	{
+		return false;
+	} 
+}
+
+bool addSocket(SOCKET id, int what, SocketState* sockets, int& socketsCount)
+{
 	for (int i = 0; i < MAX_SOCKETS; i++)
 	{
 		if (sockets[i].recv == EMPTY)
 		{
+			sockets[i].timer = time(NULL);
 			sockets[i].id = id;
 			sockets[i].recv = what;
 			sockets[i].send = IDLE;
-			sockets[i].DataLen = 0;
-			sockets[i].LastActiveted = time(0);//reset responding time
+			sockets[i].len = 0;
 			socketsCount++;
 			return (true);
 		}
@@ -265,27 +265,32 @@ bool addSocket(SOCKET id, SocketStatus what, SocketState* sockets, int& socketsC
 
 void removeSocket(int index, SocketState* sockets, int& socketsCount)
 {
+	sockets[index].timer = 0;
 	sockets[index].recv = EMPTY;
 	sockets[index].send = EMPTY;
-	sockets[index].LastActiveted = 0;
 	socketsCount--;
-	cout << "The socket in position: " << index << " removed." << endl;
 }
 
 void acceptConnection(int index, SocketState* sockets, int& socketsCount)
 {
+	sockets[index].timer = time(NULL);
 	SOCKET id = sockets[index].id;
-	sockets[index].LastActiveted = time(0);//reset responding time
 	struct sockaddr_in from;		// Address of sending partner
 	int fromLen = sizeof(from);
 
 	SOCKET msgSocket = accept(id, (struct sockaddr*)&from, &fromLen);
 	if (INVALID_SOCKET == msgSocket)
 	{
-		cout << "HTTP Server: Error at accept(): " << WSAGetLastError() << endl;
+		cout << "Server: Error at accept(): " << WSAGetLastError() << endl;
 		return;
 	}
-	cout << "HTTP Server: Client " << inet_ntoa(from.sin_addr) << ":" << ntohs(from.sin_port) << " is connected." << endl;
+	cout << "Server: Client " << inet_ntoa(from.sin_addr) << ":" << ntohs(from.sin_port) << " is connected." << endl;
+
+	unsigned long flag = 1;
+	if (ioctlsocket(msgSocket, FIONBIO, &flag) != 0)
+	{
+		cout << "Server: Error at ioctlsocket(): " << WSAGetLastError() << endl;
+	}
 
 	if (addSocket(msgSocket, RECEIVE, sockets, socketsCount) == false)
 	{
@@ -295,42 +300,48 @@ void acceptConnection(int index, SocketState* sockets, int& socketsCount)
 	return;
 }
 
-void receiveMessage(int index, SocketState* sockets, int& socketsCount)
+void receiveMessage(int index, SocketState* sockets, int& SocketCount)
 {
 	SOCKET msgSocket = sockets[index].id;
-	int len = sockets[index].DataLen;
+	int len = sockets[index].len;
 	int bytesRecv = recv(msgSocket, &sockets[index].buffer[len], sizeof(sockets[index].buffer) - len, 0);
 
-	if (SOCKET_ERROR == bytesRecv)
+	if (SOCKET_ERROR == bytesRecv || bytesRecv == 0)
 	{
-		cout << "HTTP Server: Error at recv(): " << WSAGetLastError() << endl;
+		if (bytesRecv == 0)
+		{
+			cout << "Server: Error at recv(): " << WSAGetLastError() << endl;
+		}
 		closesocket(msgSocket);
-		removeSocket(index, sockets, socketsCount);
-		return;
-	}
-	if (bytesRecv == 0)
-	{
-		closesocket(msgSocket);
-		removeSocket(index, sockets, socketsCount);
+		removeSocket(index, sockets, SocketCount);
 		return;
 	}
 	else
 	{
 		sockets[index].buffer[len + bytesRecv] = '\0'; //add the null-terminating to make it a string
-		cout << "HTTP Server: Recieved: " << bytesRecv << " bytes of \"" << &sockets[index].buffer[len] << "\" message.\n";
+		cout << "Server: Recieved: " << bytesRecv << " bytes of \"" << &sockets[index].buffer[len] << "\" message.\n";
 
-		sockets[index].DataLen += bytesRecv;
+		sockets[index].len += bytesRecv;
 
-		if (sockets[index].DataLen > 0)
+		if (sockets[index].len > 0)
 		{
-			updateSendSubType(index, sockets);
+			string buffer = (string)sockets[index].buffer;
+			string req = buffer.substr(0, buffer.find(" "));
+			int len = req.length() + 2;
+
+			sockets[index].len -= len;
+			sockets[index].send = SEND;
+			sockets[index].sendSubType = getSubType(req);
+			memcpy(sockets[index].buffer, &sockets[index].buffer[len], sockets[index].len);
+			sockets[index].buffer[sockets[index].len] = '\0';
+			sockets[index].timer = time(NULL);
 		}
 	}
-
 }
 
 void sendMessage(int index, SocketState* sockets)
 {
+	sockets[index].timer = time(NULL);
 	int bytesSent = 0;
 	char sendBuff[500];
 	string response;
@@ -367,7 +378,7 @@ void sendMessage(int index, SocketState* sockets)
 	strcpy(sendBuff, response.c_str());
 	bytesSent = send(msgSocket, sendBuff, (int)strlen(sendBuff), 0);
 	memset(sockets[index].buffer, 0, 500);
-	sockets[index].DataLen = 0;
+	sockets[index].len = 0;
 
 	if (SOCKET_ERROR == bytesSent)
 	{
@@ -386,60 +397,14 @@ void updateSocketsByResponseTime(SocketState* sockets, int& socketsCount)
 	time_t currentTime;
 	for (int i = 1; i < MAX_SOCKETS; i++)
 	{
-		currentTime = time(0);
-		if ((currentTime - sockets[i].LastActiveted > 120) && (sockets[i].LastActiveted != 0))
+		currentTime = time(NULL);
+		if ((currentTime - sockets[i].timer > 120) && (sockets[i].timer != 0))
 		{
 			removeSocket(i, sockets, socketsCount);
 		}
 	}
 }
 
-void updateSendSubType(int index, SocketState* sockets)
-{
-	int toSub;
-	string buffer, firstWord;
-	//static map<string, HTTPRequest> request = { {"TRACE",HTTPRequest::TRACE},{"DELETE",HTTPRequest::DELETE_REQ},
-	//											{"PUT",HTTPRequest::PUT},{"POST",HTTPRequest::POST},
-	//											{"HEAD",HTTPRequest::HEAD},{"GET",HTTPRequest::GET},{"OPTIONS",HTTPRequest::OPTIONS} };
-
-	buffer = (string)sockets[index].buffer;
-
-	firstWord = buffer.substr(0, buffer.find(" "));
-
-	sockets[index].send = SEND;
-	sockets[index].sendSubType = getSubType(firstWord);
-
-	toSub = firstWord.length() + 2;//1 for space and 1 for '/'
-	sockets[index].DataLen -= toSub;
-	memcpy(sockets[index].buffer, &sockets[index].buffer[toSub], sockets[index].DataLen);
-	sockets[index].buffer[sockets[index].DataLen] = '\0';
-}
-
-string getLangFromMessage(int index, SocketState* sockets)
-{
-	static map<string, string> request = { {"en","English"},{"en-AU","English"},{"en-BZ","English"},{"en-CA","English"},{"en-CB","English"},{"en-GB","English"},{"en-IE","English"},
-										{"en-JM","English"},{"en-NZ","English"},{"en-PH","English"},{"en-TT","English"},{"en-US","English"},{"en-ZA","English"},{"en-ZW","English"},
-										{"fr","French"},{"fr-BE","French"},{"fr-CA","French"},{"fr-CH","French"},{"fr-FR","French"},{"fr-LU","French"},{"fr-MC","French"},
-										{"he","Hebrew"},{"he-IL","Hebrew"} };
-	string buffer, lookWord, langWord, bufferAtLangWord;
-	size_t found;
-	//import buffer to string
-	buffer = (string)sockets[index].buffer;
-	lookWord = "?lang=";
-	found = buffer.find(lookWord);
-	if (found == std::string::npos)//lang Query String doesn't exist
-		return "English";//defult language
-	//else get the Language word in buffer
-	bufferAtLangWord = &buffer[found + lookWord.length()];
-	langWord = bufferAtLangWord.substr(0, bufferAtLangWord.find(" "));
-	auto search = request.find(langWord);
-	if (search != request.end()) {
-		return request[langWord];
-	}
-	else {
-		return "Error";//Error::No Language matched: there is no supporting language
-	}
-}
 int getSubType(string str)
 {
 	int res;
@@ -474,7 +439,6 @@ int getSubType(string str)
 	}
 }
 
-
 string traceReq(int index, SocketState* sockets)
 {
 	string response;
@@ -482,7 +446,7 @@ string traceReq(int index, SocketState* sockets)
 	int len = strlen(sockets[index].buffer);
 	len += strlen("TRACE ");
 
-	response = "HTTP/1.1 200 OK" + rn + "Content-type: message/http" + rn + "Content-length: " + to_string(len) + rn + rn + 
+	response = "HTTP/1.1 200 OK" + rn + "Content-type: message" + rn + "Content-length: " + to_string(len) + rn + rn + 
 		"TRACE " + sockets[index].buffer;
 
 	return response;
@@ -617,7 +581,7 @@ string headReq(int index, SocketState* sockets)
 			lines += getLines;
 		}
 		string len = to_string(lines.length());
-		response += rn + "Content-type: " + type + rn + " Content-length: " + len + rn + rn;
+		response += rn + "Content-type: " + type + rn + "Content-length: " + len + rn + rn;
 	}
 	else
 	{
@@ -650,7 +614,7 @@ string getReq(int index, SocketState* sockets)
 			lines += getLines;
 		}
 		string len = to_string(lines.length());
-		response += rn + "Content-type: " + type + rn + " Content-length: " + len + rn + rn + lines;
+		response += rn + "Content-type: " + type + rn + "Content-length: " + len + rn + rn + lines;
 	}
 	else
 	{
@@ -688,7 +652,7 @@ string findFile(string queryString)
 
 	for (int i = 0; i < queryString.size(); i++)
 	{
-		if (queryString[i] == '?') {
+		if (queryString[i] == '?' || queryString[i] == ' ') {
 			question_mark = i ;
 			break;
 		}
@@ -708,12 +672,15 @@ string whichLanguage(string queryString)
 			found = true;
 			index_lang = i + 1;
 		}
-
 	}
 
 	if (found)
 	{
 		return queryString.substr(index_lang, 2);
+	}
+	else
+	{
+		return "en";
 	}
 }
 
