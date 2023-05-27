@@ -55,7 +55,7 @@ void updateSocketsByResponseTime(SocketState* sockets, int& socketsCount);
 void updateSendSubType(int index, SocketState* sockets);
 string getLangFromMessage(int index, SocketState* sockets);
 size_t getBodyIndex(string buffer);
-int PutRequest(int index, char* filename, SocketState* sockets);
+string whichFile(string queryString);
 string traceReq(int index, SocketState* sockets);
 string deleteReq(int index, SocketState* sockets);
 string optionReq();
@@ -332,7 +332,7 @@ void receiveMessage(int index, SocketState* sockets, int& socketsCount)
 void sendMessage(int index, SocketState* sockets)
 {
 	int bytesSent = 0;
-	char sendBuff[255];
+	char sendBuff[500];
 	string response;
 
 	SOCKET msgSocket = sockets[index].id;
@@ -366,7 +366,7 @@ void sendMessage(int index, SocketState* sockets)
 
 	strcpy(sendBuff, response.c_str());
 	bytesSent = send(msgSocket, sendBuff, (int)strlen(sendBuff), 0);
-	memset(sockets[index].buffer, 0, 255);
+	memset(sockets[index].buffer, 0, 500);
 	sockets[index].DataLen = 0;
 
 	if (SOCKET_ERROR == bytesSent)
@@ -474,49 +474,16 @@ int getSubType(string str)
 	}
 }
 
-int PutRequest(int index, char* filename, SocketState* sockets)
-{
-	string content, buffer = (string)sockets[index].buffer, address = "C:\\Temp\\HTML_FILES\\";
-	int buffLen = 0;
-	int retCode = 200; // 'OK' code
-	size_t found;
-	filename = strtok(sockets[index].buffer, " ");
-	address += filename;
-
-	fstream outPutFile;
-	outPutFile.open(address);
-
-	if (!outPutFile.good())
-	{
-		outPutFile.open(address, ios::out);
-		retCode = 201; // New file created
-	}
-
-	if (!outPutFile.good())
-	{
-		cout << "HTTP Server: Error writing file to local storage: " << WSAGetLastError() << endl;
-		return 0; // Error opening file
-	}
-	found = buffer.find("\r\n\r\n");
-	content = &buffer[found + 4];
-	if (content.length() == 0)
-		retCode = 204; // No content
-	else
-		outPutFile << content;
-
-	outPutFile.close();
-	return retCode;
-}
 
 string traceReq(int index, SocketState* sockets)
 {
 	string response;
 	string rn = "\r\n";
-	response = "HTTP/1.1 200 OK" + rn + "Content - type: message/http" + rn + "Content-length: ";
-
 	int len = strlen(sockets[index].buffer);
 	len += strlen("TRACE ");
-	response += to_string(len) + rn + rn + sockets[index].buffer;
+
+	response = "HTTP/1.1 200 OK" + rn + "Content-type: message/http" + rn + "Content-length: " + to_string(len) + rn + rn + 
+		"TRACE " + sockets[index].buffer;
 
 	return response;
 }
@@ -527,15 +494,28 @@ string deleteReq(int index, SocketState* sockets)
 	string rn = "\r\n";
 	string FileName = findFile(string(sockets[index].buffer));
 	string lang = whichLanguage(string(sockets[index].buffer));
+	string type = whichFile(string(sockets[index].buffer));
 	string resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName;
+	fstream f;
+	char getLines[255];
+	string lines;
+	f.open(resource_path.c_str());
+	while (f.getline(getLines, 255))
+	{
+		lines += getLines;
+	}
+
+	f.close();
+	string len = to_string(lines.size());
+
 
 	if (remove(resource_path.c_str()) == 0) {
-		response = "HTTP/1.1 200 OK" + rn + "Resource deleted successfully" + rn + rn;
+		response = "HTTP/1.1 200 OK" + rn + "Content-type: " + type + rn + "Content-length: " + len + rn + rn + lines;
 	}
 
 	else
 	{
-		response = "HTTP/1.1 204 Failed to delete the file" + rn + rn;
+		response = "HTTP/1.1 204 No Content" + rn + rn;
 	}
 
 	return response;
@@ -557,43 +537,43 @@ string putReq(int index, SocketState* sockets)
 	string rn = "\r\n";
 	string FileName = findFile(string(sockets[index].buffer));
 	string lang = whichLanguage(string(sockets[index].buffer));
+	string type = whichFile(string(sockets[index].buffer));
 	string resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName;
-	string tit = title(string(sockets[index].buffer));
-	FILE* f = fopen(resource_path.c_str(), "a");
-	string response = "";
+	fstream f;
+	string response;
+	f.open(resource_path.c_str());
+	char getLines[255];
+	string lines;
 
-	if (f != nullptr)
+	if (!f.is_open())
 	{
-		response = "HTTP/1.1 200 OK" + rn + "Resource updated successfully" + rn + rn;
-
-		vector<char> lines;
-		char c;
-		do {
-			c = fgetc(f);
-			if (c != EOF)
-			{
-				lines.push_back(c);
-			}
-		} while (c != EOF);
-
-		fclose(f);
-		f = fopen(resource_path.c_str(), "w");
-
-		fprintf(f, "%s\n", tit.c_str());
-
-		for (const char& line : lines)
-		{
-			fprintf(f, "%s", line);
-		}
-
-		fclose(f);
+		f.open(resource_path.c_str(), ios_base::out);
+		response = "HTTP/1.1 201 Created" + rn + "Content-type: " + type + rn + " Content-length: 0" + rn + rn;
 	}
-
 	else
 	{
-	response = string("HTTP/1.1 404 page not found" + rn + rn);
+		response = "HTTP/1.1 200 OK ";
+
+		while (f.getline(getLines, 255))
+		{
+			lines += getLines;
+		}
+
+		f.close();
+		f.open(resource_path.c_str());
+		f << "hi from user" << endl;
+
+		for (const char& c : lines)
+		{
+			f << c << endl;
+		}
+		string len = to_string(lines.size());
+		response += rn + "Content-type: " + type + rn + " Content-length: " + len + rn + rn + lines;
+
+
 	}
 
+	f.close();
 	return response;
 }
 
@@ -620,6 +600,7 @@ string headReq(int index, SocketState* sockets)
 	string rn = "\r\n";
 	string FileName = findFile(string(sockets[index].buffer));
 	string lang = whichLanguage(string(sockets[index].buffer));
+	string type = whichFile(string(sockets[index].buffer));
 	string resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName;
 	ifstream f;
 	char getLines[255];
@@ -636,7 +617,7 @@ string headReq(int index, SocketState* sockets)
 			lines += getLines;
 		}
 		string len = to_string(lines.length());
-		response += rn + "Content-type: html" + rn + "Content-length: " + len + rn + rn;
+		response += rn + "Content-type: " + type + rn + " Content-length: " + len + rn + rn;
 	}
 	else
 	{
@@ -652,6 +633,7 @@ string getReq(int index, SocketState* sockets)
 	string rn = "\r\n";
 	string FileName = findFile(string(sockets[index].buffer));
 	string lang = whichLanguage(string(sockets[index].buffer));
+	string type = whichFile(string(sockets[index].buffer));
 	string resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName;
 	ifstream f;
 	char getLines[255];
@@ -668,7 +650,7 @@ string getReq(int index, SocketState* sockets)
 			lines += getLines;
 		}
 		string len = to_string(lines.length());
-		response += rn + "Content-type: html" + rn + "Content-length: " + len + rn + rn + lines;
+		response += rn + "Content-type: " + type + rn + " Content-length: " + len + rn + rn + lines;
 	}
 	else
 	{
@@ -679,22 +661,30 @@ string getReq(int index, SocketState* sockets)
 	return response;
 }
 
+string whichFile(string queryString)
+{
+	int index_kind = 0;
+	for (int i = 0; i < queryString.size(); i++) {
+		if (queryString[i] == '.') {
+			index_kind = i + 1;
+			break;
+		}
+	}
+
+	if (queryString.substr(index_kind, 4)._Equal("html")) {
+
+		return "html";
+	}
+	else {
+		return "txt";
+	}
+}
+
 string findFile(string queryString)
 {
 	int numOfBorder = 0;
 	int index_file = 0;
 	int question_mark = 0;
-
-	/*for (int i = 0; i < queryString.size(); i++) {
-		if (queryString[i] == '') {
-			numOfBorder++;
-		}
-
-		if (numOfBorder == 1) {
-			index_file = i + 1;
-			break;
-		}
-	}*/
 
 	for (int i = 0; i < queryString.size(); i++)
 	{
