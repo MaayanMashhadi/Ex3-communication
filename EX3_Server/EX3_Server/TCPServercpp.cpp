@@ -391,20 +391,6 @@ void sendMessage(int index, SocketState* sockets)
 	sockets[index].send = IDLE;
 }
 
-// A utility to check for the inactive sockets (if the response time is greater then 2 minutes) and remove them
-void updateSocketsByResponseTime(SocketState* sockets, int& socketsCount)
-{
-	time_t currentTime;
-	for (int i = 1; i < MAX_SOCKETS; i++)
-	{
-		currentTime = time(NULL);
-		if ((currentTime - sockets[i].timer > 120) && (sockets[i].timer != 0))
-		{
-			removeSocket(i, sockets, socketsCount);
-		}
-	}
-}
-
 int getSubType(string str)
 {
 	int res;
@@ -459,7 +445,15 @@ string deleteReq(int index, SocketState* sockets)
 	string FileName = findFile(string(sockets[index].buffer));
 	string lang = whichLanguage(string(sockets[index].buffer));
 	string type = whichFile(string(sockets[index].buffer));
-	string resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName;
+	string resource_path;
+	if (lang == " ")
+	{
+		resource_path = "C:\\temp\\example_files\\" + FileName;
+	}
+	else
+	{
+		resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName;
+	}
 	fstream f;
 	char getLines[255];
 	string lines;
@@ -502,7 +496,15 @@ string putReq(int index, SocketState* sockets)
 	string FileName = findFile(string(sockets[index].buffer));
 	string lang = whichLanguage(string(sockets[index].buffer));
 	string type = whichFile(string(sockets[index].buffer));
-	string resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName;
+	string resource_path;
+	if (lang == " ")
+	{
+		resource_path = "C:\\temp\\example_files\\" + FileName;
+	}
+	else
+	{
+		resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName;
+	}
 	fstream f;
 	string response;
 	f.open(resource_path.c_str());
@@ -512,7 +514,7 @@ string putReq(int index, SocketState* sockets)
 	if (!f.is_open())
 	{
 		f.open(resource_path.c_str(), ios_base::out);
-		response = "HTTP/1.1 201 Created" + rn + "Content-type: " + type + rn + " Content-length: 0" + rn + rn;
+		response = "HTTP/1.1 201 Created" + rn + "Content-type: " + type + rn + "Content-length: 0" + rn + rn;
 	}
 	else
 	{
@@ -532,7 +534,7 @@ string putReq(int index, SocketState* sockets)
 			f << c << endl;
 		}
 		string len = to_string(lines.size());
-		response += rn + "Content-type: " + type + rn + " Content-length: " + len + rn + rn + lines;
+		response += rn + "Content-type: " + type + rn + "Content-length: " + len + rn + rn + lines;
 
 
 	}
@@ -565,7 +567,15 @@ string headReq(int index, SocketState* sockets)
 	string FileName = findFile(string(sockets[index].buffer));
 	string lang = whichLanguage(string(sockets[index].buffer));
 	string type = whichFile(string(sockets[index].buffer));
-	string resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName;
+	string resource_path;
+	if (lang == " ")
+	{
+		resource_path = "C:\\temp\\example_files\\" + FileName;
+	}
+	else
+	{
+		resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName;
+	}
 	ifstream f;
 	char getLines[255];
 	string lines;
@@ -598,7 +608,15 @@ string getReq(int index, SocketState* sockets)
 	string FileName = findFile(string(sockets[index].buffer));
 	string lang = whichLanguage(string(sockets[index].buffer));
 	string type = whichFile(string(sockets[index].buffer));
-	string resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName;
+	string resource_path;
+	if (lang == " ")
+	{
+		resource_path = "C:\\temp\\example_files\\" + FileName;
+	}
+	else
+	{
+		resource_path = "C:\\temp\\example_files\\" + lang + "\\" + FileName;
+	}
 	ifstream f;
 	char getLines[255];
 	string lines;
@@ -665,10 +683,16 @@ string whichLanguage(string queryString)
 {
 	bool found = false;
 	int index_lang = 0;
+	bool flag = false;
 	for (int i = 0; i < queryString.size() && !found; i++)
 	{
-
-		if (queryString[i] == '=') {
+		if (queryString[i] == '?') {
+			flag = true;
+		}
+		else if(queryString[i] == ' ') {
+			break;
+		}
+		else if (queryString[i] == '=' && flag) {
 			found = true;
 			index_lang = i + 1;
 		}
@@ -680,7 +704,7 @@ string whichLanguage(string queryString)
 	}
 	else
 	{
-		return "en";
+		return " ";
 	}
 }
 
