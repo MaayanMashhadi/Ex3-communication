@@ -533,8 +533,8 @@ string putReq(int index, SocketState* sockets)
 		{
 			f << c << endl;
 		}
-		string len = to_string(lines.size());
-		response += rn + "Content-type: " + type + rn + "Content-length: " + len + rn + rn + lines;
+		string len = to_string(lines.size() + 12);
+		response += rn + "Content-type: " + type + rn + "Content-length: " + len + rn + rn + lines + "hi from user";
 
 
 	}
